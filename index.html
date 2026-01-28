@@ -1,480 +1,430 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
+
 <html>
+
 <head>
+
     <title>Web Battle</title>
+
     <style>
+
         body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; text-align: center; margin: 0; padding: 20px; }
+
         canvas { background: #222; border: 4px solid #444; cursor: crosshair; }
+
         .ui-panel { background: #333; padding: 15px; border-radius: 8px; margin: 10px auto; width: 900px; display: flex; justify-content: space-around; align-items: center; }
+
         button { padding: 10px 15px; font-weight: bold; cursor: pointer; border: none; border-radius: 4px; }
+
         #startBtn { background: #2ecc71; color: white; }
+
         .unit-btn { background: #555; color: white; border: 2px solid transparent; }
+
         .unit-btn.active { border-color: #4d94ff; background: #444; }
+
         #upgradeScreen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
+
         .upgrade-card { background: #444; padding: 20px; margin: 10px; border: 2px solid #666; cursor: pointer; border-radius: 10px; width: 250px; }
+
         .upgrade-card:hover { border-color: #2ecc71; }
+
         .inventory { font-size: 0.8rem; color: #aaa; margin-top: 10px; }
+
     </style>
+
 </head>
+
 <body>
 
+
     <div class="ui-panel">
+
         <div>Lives: <span id="livesDisplay" style="color:#ff4d4d">❤️❤️❤️</span></div>
+
         <div class="stat-box">Lvl: <span id="lvlDisplay">1</span> | Budget: <span id="pointsDisplay">20</span></div>
+
         <div>
+
             <button id="btnMelee" class="unit-btn active" onclick="selectUnit('melee')">Melee (10pts)</button>
+
             <button id="btnArcher" class="unit-btn" onclick="selectUnit('archer')">Archer (15pts)</button>
+
         </div>
+
         <button id="startBtn" onclick="startBattle()">START</button>
+
     </div>
+
 
     <canvas id="battleCanvas" width="900" height="400"></canvas>
+
     <div class="inventory">Upgrades: <span id="invDisplay">None</span></div>
 
+
     <div id="upgradeScreen">
+
         <h1>GAME OVER - CHOOSE AN UPGRADE</h1>
+
         <div style="display: flex;" id="upgradeOptions"></div>
+
     </div>
 
+
     <script>
+
         const canvas = document.getElementById('battleCanvas');
+
         const ctx = canvas.getContext('2d');
+
         
+
         let level = 1, lives = 3, isBattleRunning = false, selectedUnit = 'melee';
-        let points = 20;
+
         let reds = [], blues = [];
+
         let playerUpgrades = [];
+
         let availableUpgrades = [
+
             { id: 'Rich', text: 'Increase points per level by 20%' },
+
             { id: 'Fast Archers', text: 'Archers shoot twice as fast' },
+
             { id: 'Tank', text: 'Melee units start with 4 HP' },
+
             { id: 'Powerful Arrows', text: 'Archers deal 2 DMG' },
+
             { id: 'Weaker Enemies', text: 'Red starts with -1 melee unit' },
+
             { id: 'Better Swords', text: 'Melee units win 60% of fights' }
+
         ];
+
 
         const COSTS = { melee: 10, archer: 15 };
 
-        class Square {
-            constructor(x, y, side, type) {
-                this.x = x - 10; this.y = y - 10;
-                this.side = side; this.type = type;
-                
-                // HP Logic
-                if (type === 'ninja') {
-                    this.hp = 5;
-                    this.invulnTimer = 180; 
-                } else if (side === 'blue' && type === 'melee' && hasUpgrade('Tank')) {
-                    this.hp = 4;
-                } else if (side === 'red' && type === 'melee' && level > 30) {
-                    // ENEMY BUFF: Melee units get 6 HP after level 30
-                    this.hp = 6;
-                } else {
-                    this.hp = 3;
-                }
-
-                this.maxHp = this.hp;
-                this.attackTimer = 0;
-            }
-
-            draw() {
-                ctx.save();
-                if (this.type === 'ninja' && this.invulnTimer > 0) {
-                    ctx.globalAlpha = 0.4;
-                }
-
-                ctx.fillStyle = this.side;
-                if (this.type === 'archer') { 
-                    ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, 20, 20); 
-                } else if (this.type === 'ninja') {
-                    ctx.fillRect(this.x, this.y, 20, 20);
-                    ctx.fillStyle = "black";
-                    ctx.fillRect(this.x + 5, this.y + 5, 10, 10);
-                    ctx.fillStyle = this.side;
-                }
-                ctx.fillRect(this.x, this.y, 20, 20);
-                
-                ctx.globalAlpha = 1.0;
-                ctx.fillStyle = "#444"; ctx.fillRect(this.x, this.y - 7, 20, 4);
-                ctx.fillStyle = this.side === 'red' ? '#ff4d4d' : '#4d94ff';
-                ctx.fillRect(this.x, this.y - 7, (this.hp / this.maxHp) * 20, 4);
-                ctx.restore();
-            }
-
-            takeDamage(amt) {
-                if (this.type === 'ninja' && this.invulnTimer > 0) return;
-                this.hp -= amt;
-            }
-
-            update(enemies) {
-                if (enemies.length === 0) return;
-                if (this.invulnTimer > 0) this.invulnTimer--;
-
-                let nearest = null, minDist = Infinity;
-                for (let en of enemies) {
-                    const dist = Math.hypot(en.x - this.x, en.y - this.y);
-                    if (dist < minDist) { minDist = dist; nearest = en; }
-                }
-
-                if (nearest) {
-                    const angle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
-                    
-                    if (this.type === 'archer') {
-                        if (minDist > 250) { 
-                            this.x += Math.cos(angle) * 1.5; 
-                            this.y += Math.sin(angle) * 1.5; 
-                        } else {
-                            const speed = (this.side === 'blue' && hasUpgrade('Fast Archers')) ? 60 : 120;
-                            
-                            let dmg = 1;
-                            if (this.side === 'blue' && hasUpgrade('Powerful Arrows')) {
-                                dmg = 2;
-                            } else if (this.side === 'red' && level > 10) {
-                                dmg = 2;
-                            }
-
-                            this.attackTimer++;
-                            if (this.attackTimer >= speed) {
-                                nearest.takeDamage(dmg); 
-                                this.attackTimer = 0;
-                                this.shotLine = {
-                                    x1: this.x+10, y1: this.y+10, 
-                                    x2: nearest.x+10, y2: nearest.y+10, 
-                                    life: 10,
-                                    width: dmg > 1 ? 4 : 1
-                                };
-                            }
-                        }
-                    } else {
-                        const moveSpeed = this.type === 'ninja' ? 4 : 2;
-                        this.x += Math.cos(angle) * moveSpeed;
-                        this.y += Math.sin(angle) * moveSpeed;
-
-                        if (minDist < 20) {
-                            let winChance = (this.side === 'blue' && hasUpgrade('Better Swords')) ? 0.6 : 0.5;
-                            if (Math.random() < winChance) nearest.takeDamage(1); 
-                            else this.takeDamage(1);
-                            
-                            this.x -= Math.cos(angle) * 40; this.y -= Math.sin(angle) * 40;
-                        }
-                    }
-                }
-            }
-        }
-
-        function hasUpgrade(id) { return playerUpgrades.some(u => u.id === id); }
-        function selectUnit(t) { selectedUnit = t; document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.id.toLowerCase().includes(t))); }
-        function startBattle() { if (blues.length > 0) isBattleRunning = true; }
-        
-        function updateUI() {
-            document.getElementById('lvlDisplay').innerText = level;
-            document.getElementById('pointsDisplay').innerText = points;
-            document.getElementById('livesDisplay').innerText = "❤️".repeat(lives);
-            document.getElementById('invDisplay').innerText = playerUpgrades.map(u => u.id).join(", ") || "None";
-        }
-
-        function initLevel() {
-            isBattleRunning = false; reds = []; blues = [];
-            let basePoints = 10 + (level * 10);
-            points = hasUpgrade('Rich') ? Math.floor(basePoints * 1.2) : basePoints;
-            
-            let meleeCount = (level + 1) - (hasUpgrade('Weaker Enemies') ? 1 : 0);
-            let archerCount = Math.floor(level / 5);
-            let ninjaCount = Math.floor(level / 8);
-
-            for(let i=0; i < Math.max(1, meleeCount); i++) reds.push(new Square(Math.random()*150+50, Math.random()*360+20, 'red', 'melee'));
-            for(let i=0; i < archerCount; i++) reds.push(new Square(Math.random()*50+20, Math.random()*360+20, 'red', 'archer'));
-            for(let i=0; i < ninjaCount; i++) reds.push(new Square(Math.random()*150+50, Math.random()*360+20, 'red', 'ninja'));
-            updateUI();
-        }
-
-        function showUpgrades() {
-            if (availableUpgrades.length === 0) { resetGame(); return; }
-            const options = [...availableUpgrades].sort(() => 0.5 - Math.random()).slice(0, 2);
-            const container = document.getElementById('upgradeOptions');
-            container.innerHTML = '';
-            options.forEach(upg => {
-                const div = document.createElement('div');
-                div.className = 'upgrade-card';
-                div.innerHTML = `<h3>${upg.id}</h3><p>${upg.text}</p>`;
-                div.onclick = () => { 
-                    playerUpgrades.push(upg); 
-                    availableUpgrades = availableUpgrades.filter(a => a.id !== upg.id); 
-                    document.getElementById('upgradeScreen').style.display = 'none'; 
-                    resetGame(); 
-                };
-                container.appendChild(div);
-            });
-            document.getElementById('upgradeScreen').style.display = 'flex';
-        }
-
-        function resetGame() { level = 1; lives = 3; playerUpgrades = []; initLevel(); }
-
-        canvas.addEventListener('mousedown', (e) => {
-            if (isBattleRunning || points < COSTS[selectedUnit]) return;
-            const rect = canvas.getBoundingClientRect();
-            if (e.clientX - rect.left > canvas.width * 2/3) {
-                blues.push(new Square(e.clientX - rect.left, e.clientY - rect.top, 'blue', selectedUnit));
-                points -= COSTS[selectedUnit]; updateUI();
-            }
-        });
-
-        function loop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (!isBattleRunning) { ctx.fillStyle = "rgba(77, 148, 255, 0.05)"; ctx.fillRect(600, 0, 300, 400); }
-            reds = reds.filter(r => r.hp > 0); blues = blues.filter(b => b.hp > 0);
-            
-            [...reds, ...blues].forEach(u => { 
-                if(isBattleRunning) u.update(u.side === 'red' ? blues : reds); 
-                u.draw();
-                if (u.shotLine && u.shotLine.life > 0) {
-                    ctx.beginPath(); 
-                    ctx.lineWidth = u.shotLine.width || 1;
-                    ctx.strokeStyle = u.side === 'red' ? "orange" : "yellow";
-                    ctx.moveTo(u.shotLine.x1, u.shotLine.y1); ctx.lineTo(u.shotLine.x2, u.shotLine.y2);
-                    ctx.stroke(); u.shotLine.life--;
-                }
-            });
-
-            if (isBattleRunning) {
-                if (reds.length === 0) { isBattleRunning = false; level++; setTimeout(initLevel, 500); }
-                else if (blues.length === 0) { isBattleRunning = false; lives--; if (lives <= 0) showUpgrades(); else setTimeout(initLevel, 500); }
-            }
-            requestAnimationFrame(loop);
-        }
-
-        initLevel(); loop();
-    </script>
-</body>
-</html>
-    <div class="ui-panel">
-        <div>Lives: <span id="livesDisplay" style="color:#ff4d4d">❤️❤️❤️</span></div>
-        <div class="stat-box">Lvl: <span id="lvlDisplay">1</span> | Dollars: <span id="pointsDisplay">20</span></div>
-        <div>
-            <button id="btnMelee" class="unit-btn active" onclick="selectUnit('melee')">Melee (10pts)</button>
-            <button id="btnArcher" class="unit-btn" onclick="selectUnit('archer')">Archer (15pts)</button>
-        </div>
-        <button id="startBtn" onclick="startBattle()">START</button>
-    </div>
-
-    <canvas id="battleCanvas" width="900" height="400"></canvas>
-    <div class="inventory">Upgrades: <span id="invDisplay">None</span></div>
-
-    <div id="upgradeScreen">
-        <h1>GAME OVER - CHOOSE AN UPGRADE</h1>
-        <div style="display: flex;" id="upgradeOptions"></div>
-    </div>
-
-    <script>
-        const canvas = document.getElementById('battleCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        let level = 1, lives = 3, isBattleRunning = false, selectedUnit = 'melee';
-        let points = 20;
-        let reds = [], blues = [];
-        let playerUpgrades = [];
-        let availableUpgrades = [
-            { id: 'Rich', text: 'Increase points per level by 20%' },
-            { id: 'Fast Archers', text: 'Archers shoot twice as fast' },
-            { id: 'Tank', text: 'Melee units start with 4 HP' },
-            { id: 'Powerful Arrows', text: 'Archers deal 2 DMG' },
-            { id: 'Weaker Enemies', text: 'Red starts with -1 melee unit' },
-            { id: 'Better Swords', text: 'Melee units win 60% of fights' }
-        ];
-
-        const COSTS = { melee: 10, archer: 15 };
 
         class Square {
+
             constructor(x, y, side, type) {
+
                 this.x = x - 10; this.y = y - 10;
+
                 this.side = side; this.type = type;
+
                 
-                // HP Logic
+
                 if (type === 'ninja') {
+
                     this.hp = 5;
-                    this.invulnTimer = 180; 
+
+                    this.invulnTimer = 180; // 3 seconds at 60fps
+
                 } else if (side === 'blue' && type === 'melee' && hasUpgrade('Tank')) {
+
                     this.hp = 4;
-                } else if (side === 'red' && type === 'melee' && level > 30) {
-                    // ENEMY BUFF: Melee units get 6 HP after level 30
-                    this.hp = 6;
+
                 } else {
+
                     this.hp = 3;
+
                 }
+
 
                 this.maxHp = this.hp;
+
                 this.attackTimer = 0;
+
             }
+
 
             draw() {
+
                 ctx.save();
+
+                // Visual feedback for Ninja invulnerability
+
                 if (this.type === 'ninja' && this.invulnTimer > 0) {
-                    ctx.globalAlpha = 0.4;
+
+                    ctx.globalAlpha = 0.4; // Ghost effect
+
                 }
+
 
                 ctx.fillStyle = this.side;
+
                 if (this.type === 'archer') { 
+
                     ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, 20, 20); 
+
                 } else if (this.type === 'ninja') {
+
                     ctx.fillRect(this.x, this.y, 20, 20);
+
                     ctx.fillStyle = "black";
+
                     ctx.fillRect(this.x + 5, this.y + 5, 10, 10);
+
                     ctx.fillStyle = this.side;
+
                 }
+
                 ctx.fillRect(this.x, this.y, 20, 20);
+
                 
+
+                // HP Bar
+
                 ctx.globalAlpha = 1.0;
+
                 ctx.fillStyle = "#444"; ctx.fillRect(this.x, this.y - 7, 20, 4);
+
                 ctx.fillStyle = this.side === 'red' ? '#ff4d4d' : '#4d94ff';
+
                 ctx.fillRect(this.x, this.y - 7, (this.hp / this.maxHp) * 20, 4);
+
                 ctx.restore();
+
             }
+
 
             takeDamage(amt) {
+
+                // If Ninja and timer active, ignore damage
+
                 if (this.type === 'ninja' && this.invulnTimer > 0) return;
+
                 this.hp -= amt;
+
             }
+
 
             update(enemies) {
+
                 if (enemies.length === 0) return;
+
                 if (this.invulnTimer > 0) this.invulnTimer--;
 
+
                 let nearest = null, minDist = Infinity;
+
                 for (let en of enemies) {
+
                     const dist = Math.hypot(en.x - this.x, en.y - this.y);
+
                     if (dist < minDist) { minDist = dist; nearest = en; }
+
                 }
+
 
                 if (nearest) {
+
                     const angle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
+
                     
+
                     if (this.type === 'archer') {
-                        if (minDist > 250) { 
-                            this.x += Math.cos(angle) * 1.5; 
-                            this.y += Math.sin(angle) * 1.5; 
-                        } else {
+
+                        if (minDist > 250) { this.x += Math.cos(angle) * 1.5; this.y += Math.sin(angle) * 1.5; }
+
+                        else {
+
                             const speed = (this.side === 'blue' && hasUpgrade('Fast Archers')) ? 60 : 120;
-                            
-                            let dmg = 1;
-                            if (this.side === 'blue' && hasUpgrade('Powerful Arrows')) {
-                                dmg = 2;
-                            } else if (this.side === 'red' && level > 10) {
-                                dmg = 2;
-                            }
+
+                            const dmg = (this.side === 'blue' && hasUpgrade('Powerful Arrows')) ? 2 : 1;
 
                             this.attackTimer++;
+
                             if (this.attackTimer >= speed) {
+
                                 nearest.takeDamage(dmg); 
+
                                 this.attackTimer = 0;
-                                this.shotLine = {
-                                    x1: this.x+10, y1: this.y+10, 
-                                    x2: nearest.x+10, y2: nearest.y+10, 
-                                    life: 10,
-                                    width: dmg > 1 ? 4 : 1
-                                };
+
+                                this.shotLine = {x1: this.x+10, y1: this.y+10, x2: nearest.x+10, y2: nearest.y+10, life: 10};
+
                             }
+
                         }
+
                     } else {
+
                         const moveSpeed = this.type === 'ninja' ? 4 : 2;
+
                         this.x += Math.cos(angle) * moveSpeed;
+
                         this.y += Math.sin(angle) * moveSpeed;
 
+
                         if (minDist < 20) {
+
                             let winChance = (this.side === 'blue' && hasUpgrade('Better Swords')) ? 0.6 : 0.5;
+
                             if (Math.random() < winChance) nearest.takeDamage(1); 
+
                             else this.takeDamage(1);
+
                             
+
                             this.x -= Math.cos(angle) * 40; this.y -= Math.sin(angle) * 40;
+
                         }
+
                     }
+
                 }
+
             }
+
         }
+
+
+        // Helper functions
 
         function hasUpgrade(id) { return playerUpgrades.some(u => u.id === id); }
+
         function selectUnit(t) { selectedUnit = t; document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.id.toLowerCase().includes(t))); }
+
         function startBattle() { if (blues.length > 0) isBattleRunning = true; }
-        
+
         function updateUI() {
+
             document.getElementById('lvlDisplay').innerText = level;
+
             document.getElementById('pointsDisplay').innerText = points;
+
             document.getElementById('livesDisplay').innerText = "❤️".repeat(lives);
+
             document.getElementById('invDisplay').innerText = playerUpgrades.map(u => u.id).join(", ") || "None";
+
         }
+
 
         function initLevel() {
+
             isBattleRunning = false; reds = []; blues = [];
+
             let basePoints = 10 + (level * 10);
+
             points = hasUpgrade('Rich') ? Math.floor(basePoints * 1.2) : basePoints;
+
             
+
             let meleeCount = (level + 1) - (hasUpgrade('Weaker Enemies') ? 1 : 0);
+
             let archerCount = Math.floor(level / 5);
+
             let ninjaCount = Math.floor(level / 8);
 
+
             for(let i=0; i < Math.max(1, meleeCount); i++) reds.push(new Square(Math.random()*150+50, Math.random()*360+20, 'red', 'melee'));
+
             for(let i=0; i < archerCount; i++) reds.push(new Square(Math.random()*50+20, Math.random()*360+20, 'red', 'archer'));
+
             for(let i=0; i < ninjaCount; i++) reds.push(new Square(Math.random()*150+50, Math.random()*360+20, 'red', 'ninja'));
+
             updateUI();
+
         }
+
 
         function showUpgrades() {
+
             if (availableUpgrades.length === 0) { resetGame(); return; }
+
             const options = [...availableUpgrades].sort(() => 0.5 - Math.random()).slice(0, 2);
+
             const container = document.getElementById('upgradeOptions');
+
             container.innerHTML = '';
+
             options.forEach(upg => {
+
                 const div = document.createElement('div');
+
                 div.className = 'upgrade-card';
+
                 div.innerHTML = `<h3>${upg.id}</h3><p>${upg.text}</p>`;
-                div.onclick = () => { 
-                    playerUpgrades.push(upg); 
-                    availableUpgrades = availableUpgrades.filter(a => a.id !== upg.id); 
-                    document.getElementById('upgradeScreen').style.display = 'none'; 
-                    resetGame(); 
-                };
+
+                div.onclick = () => { playerUpgrades.push(upg); availableUpgrades = availableUpgrades.filter(a => a.id !== upg.id); document.getElementById('upgradeScreen').style.display = 'none'; resetGame(); };
+
                 container.appendChild(div);
+
             });
+
             document.getElementById('upgradeScreen').style.display = 'flex';
+
         }
 
-        function resetGame() { level = 1; lives = 3; playerUpgrades = []; initLevel(); }
+
+        function resetGame() { level = 1; lives = 3; initLevel(); }
+
 
         canvas.addEventListener('mousedown', (e) => {
+
             if (isBattleRunning || points < COSTS[selectedUnit]) return;
+
             const rect = canvas.getBoundingClientRect();
+
             if (e.clientX - rect.left > canvas.width * 2/3) {
+
                 blues.push(new Square(e.clientX - rect.left, e.clientY - rect.top, 'blue', selectedUnit));
+
                 points -= COSTS[selectedUnit]; updateUI();
+
             }
+
         });
 
+
         function loop() {
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
             if (!isBattleRunning) { ctx.fillStyle = "rgba(77, 148, 255, 0.05)"; ctx.fillRect(600, 0, 300, 400); }
+
             reds = reds.filter(r => r.hp > 0); blues = blues.filter(b => b.hp > 0);
+
             
+
             [...reds, ...blues].forEach(u => { 
+
                 if(isBattleRunning) u.update(u.side === 'red' ? blues : reds); 
+
                 u.draw();
+
                 if (u.shotLine && u.shotLine.life > 0) {
-                    ctx.beginPath(); 
-                    ctx.lineWidth = u.shotLine.width || 1;
-                    ctx.strokeStyle = u.side === 'red' ? "orange" : "yellow";
+
+                    ctx.beginPath(); ctx.strokeStyle = u.side === 'red' ? "orange" : "yellow";
+
                     ctx.moveTo(u.shotLine.x1, u.shotLine.y1); ctx.lineTo(u.shotLine.x2, u.shotLine.y2);
+
                     ctx.stroke(); u.shotLine.life--;
+
                 }
+
             });
 
+
             if (isBattleRunning) {
+
                 if (reds.length === 0) { isBattleRunning = false; level++; setTimeout(initLevel, 500); }
+
                 else if (blues.length === 0) { isBattleRunning = false; lives--; if (lives <= 0) showUpgrades(); else setTimeout(initLevel, 500); }
+
             }
+
             requestAnimationFrame(loop);
+
         }
 
+
         initLevel(); loop();
+
     </script>
+
 </body>
+
 </html>
 
 
