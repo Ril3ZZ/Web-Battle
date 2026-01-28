@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Web Battle - Cannon Update</title>
+    <title>Web Battle: Hero's Fate</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; text-align: center; margin: 0; padding: 20px; }
         canvas { background: #222; border: 4px solid #444; cursor: crosshair; }
@@ -11,12 +11,11 @@
         .unit-btn { background: #555; color: white; border: 2px solid transparent; }
         .unit-btn.active { border-color: #4d94ff; background: #444; }
         #upgradeScreen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
-        .upgrade-card { background: #444; padding: 20px; margin: 10px; border: 2px solid #666; cursor: pointer; border-radius: 10px; width: 250px; }
-        .upgrade-card:hover { border-color: #2ecc71; }
+        .upgrade-card { background: #444; padding: 20px; margin: 10px; border: 2px solid #666; cursor: pointer; border-radius: 10px; width: 250px; transition: 0.2s; }
+        .upgrade-card:hover { border-color: #2ecc71; transform: scale(1.05); }
+        .upgrade-card img { width: 120px; height: 120px; border-radius: 50%; border: 3px solid gold; margin-bottom: 10px; object-fit: cover; }
         .inventory { font-size: 0.8rem; color: #aaa; margin-top: 10px; }
-        
-        /* GIF Container Styling */
-        .gif-container { margin-top: 20px; display: flex; justify-content: center; align-items: center; }
+        .gif-container { margin-top: 20px; }
         #battleGif { max-width: 900px; border-radius: 8px; border: 2px solid #333; }
     </style>
 </head>
@@ -41,7 +40,7 @@
     </div>
 
     <div id="upgradeScreen">
-        <h1>GAME OVER - CHOOSE AN UPGRADE</h1>
+        <h1 id="screenTitle">GAME OVER</h1>
         <div style="display: flex;" id="upgradeOptions"></div>
     </div>
 
@@ -52,6 +51,8 @@
         let level = 1, lives = 3, points = 20, isBattleRunning = false, selectedUnit = 'melee';
         let reds = [], blues = [];
         let playerUpgrades = [];
+        let heroChosen = null;
+
         let availableUpgrades = [
             { id: 'Rich', text: 'Increase points per level by 20%' },
             { id: 'Fast Archers', text: 'Archers shoot twice as fast' },
@@ -67,20 +68,16 @@
             constructor(x, y, side, type) {
                 this.x = x - 10; this.y = y - 10;
                 this.side = side; this.type = type;
-                
-                if (type === 'ninja') {
-                    this.hp = 5;
-                    this.invulnTimer = 180;
-                } else if (type === 'cannon') {
-                    this.hp = 10; // Cannons are sturdy
-                } else if (side === 'blue' && type === 'melee' && hasUpgrade('Tank')) {
-                    this.hp = 4;
-                } else {
-                    this.hp = 3;
-                }
+                this.attackTimer = 0;
+
+                if (type === 'ninja') { this.hp = 5; this.invulnTimer = 180; }
+                else if (type === 'cannon') { this.hp = 12; }
+                else if (type === 'king') { this.hp = 25; }
+                else if (type === 'queen') { this.hp = 18; }
+                else if (side === 'blue' && type === 'melee' && hasUpgrade('Tank')) { this.hp = 4; }
+                else { this.hp = 3; }
 
                 this.maxHp = this.hp;
-                this.attackTimer = 0;
             }
 
             draw() {
@@ -88,24 +85,23 @@
                 if (this.type === 'ninja' && this.invulnTimer > 0) ctx.globalAlpha = 0.4;
 
                 ctx.fillStyle = this.side;
-                if (this.type === 'archer') { 
-                    ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, 20, 20); 
-                } else if (this.type === 'ninja') {
-                    ctx.fillRect(this.x, this.y, 20, 20);
-                    ctx.fillStyle = "black"; ctx.fillRect(this.x + 5, this.y + 5, 10, 10);
-                    ctx.fillStyle = this.side;
+                if (this.type === 'archer') {
+                    ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, 20, 20);
                 } else if (this.type === 'cannon') {
-                    ctx.fillStyle = "#555"; 
-                    ctx.fillRect(this.x - 5, this.y - 5, 30, 30); // Cannon is bigger
-                    ctx.fillStyle = this.side;
+                    ctx.fillStyle = "#555"; ctx.fillRect(this.x - 5, this.y - 5, 30, 30);
+                } else if (this.type === 'king' || this.type === 'queen') {
+                    ctx.shadowBlur = 10; ctx.shadowColor = "gold";
+                    ctx.strokeStyle = "gold"; ctx.lineWidth = 3; ctx.strokeRect(this.x-2, this.y-2, 24, 24);
                 }
+                
+                ctx.fillStyle = (this.type === 'king') ? "#f1c40f" : (this.type === 'queen') ? "#e84393" : this.side;
                 ctx.fillRect(this.x, this.y, 20, 20);
                 
                 // HP Bar
                 ctx.globalAlpha = 1.0;
-                ctx.fillStyle = "#444"; ctx.fillRect(this.x, this.y - 10, 20, 4);
+                ctx.fillStyle = "#444"; ctx.fillRect(this.x, this.y - 12, 20, 4);
                 ctx.fillStyle = this.side === 'red' ? '#ff4d4d' : '#4d94ff';
-                ctx.fillRect(this.x, this.y - 10, (this.hp / this.maxHp) * 20, 4);
+                ctx.fillRect(this.x, this.y - 12, (this.hp / this.maxHp) * 20, 4);
                 ctx.restore();
             }
 
@@ -128,14 +124,26 @@
                     const angle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
                     
                     if (this.type === 'cannon') {
-                        // Cannon: Stationary, 10s reload (600 frames), 3 DMG AOE
                         this.attackTimer++;
                         if (this.attackTimer >= 600) {
                             enemies.forEach(en => {
-                                const d = Math.hypot(en.x - nearest.x, en.y - nearest.y);
-                                if (d < 100) en.takeDamage(3);
+                                if (Math.hypot(en.x - nearest.x, en.y - nearest.y) < 100) en.takeDamage(3);
                             });
                             this.shotLine = {x1: this.x+10, y1: this.y+10, x2: nearest.x+10, y2: nearest.y+10, life: 30, isAOE: true};
+                            this.attackTimer = 0;
+                        }
+                    } else if (this.type === 'king') {
+                        this.x += Math.cos(angle) * 2.5; this.y += Math.sin(angle) * 2.5;
+                        if (minDist < 30) {
+                            enemies.forEach(en => { if (Math.hypot(en.x-this.x, en.y-this.y) < 70) en.takeDamage(2); });
+                            this.x -= Math.cos(angle) * 40; this.y -= Math.sin(angle) * 40;
+                        }
+                    } else if (this.type === 'queen') {
+                        if (minDist > 300) { this.x += Math.cos(angle) * 2; this.y += Math.sin(angle) * 2; }
+                        this.attackTimer++;
+                        if (this.attackTimer >= 25) {
+                            nearest.takeDamage(1);
+                            this.shotLine = {x1: this.x+10, y1: this.y+10, x2: nearest.x+10, y2: nearest.y+10, life: 5};
                             this.attackTimer = 0;
                         }
                     } else if (this.type === 'archer') {
@@ -145,20 +153,16 @@
                             const dmg = (this.side === 'blue' && hasUpgrade('Powerful Arrows')) ? 2 : 1;
                             this.attackTimer++;
                             if (this.attackTimer >= speed) {
-                                nearest.takeDamage(dmg); 
-                                this.attackTimer = 0;
+                                nearest.takeDamage(dmg); this.attackTimer = 0;
                                 this.shotLine = {x1: this.x+10, y1: this.y+10, x2: nearest.x+10, y2: nearest.y+10, life: 10};
                             }
                         }
                     } else {
                         const moveSpeed = this.type === 'ninja' ? 4 : 2;
-                        this.x += Math.cos(angle) * moveSpeed;
-                        this.y += Math.sin(angle) * moveSpeed;
-
+                        this.x += Math.cos(angle) * moveSpeed; this.y += Math.sin(angle) * moveSpeed;
                         if (minDist < 20) {
                             let winChance = (this.side === 'blue' && hasUpgrade('Better Swords')) ? 0.6 : 0.5;
-                            if (Math.random() < winChance) nearest.takeDamage(1); 
-                            else this.takeDamage(1);
+                            if (Math.random() < winChance) nearest.takeDamage(1); else this.takeDamage(1);
                             this.x -= Math.cos(angle) * 40; this.y -= Math.sin(angle) * 40;
                         }
                     }
@@ -179,7 +183,7 @@
 
         function initLevel() {
             isBattleRunning = false; reds = []; blues = [];
-            let basePoints = 20 + (level * 10);
+            let basePoints = 10 + (level * 10);
             points = hasUpgrade('Rich') ? Math.floor(basePoints * 1.2) : basePoints;
             
             let meleeCount = (level + 1) - (hasUpgrade('Weaker Enemies') ? 1 : 0);
@@ -192,26 +196,48 @@
             for(let i=0; i < ninjaCount; i++) reds.push(new Square(Math.random()*150+50, Math.random()*360+20, 'red', 'ninja'));
             for(let i=0; i < cannonCount; i++) reds.push(new Square(40, 200, 'red', 'cannon'));
             
+            if(heroChosen) {
+                blues.push(new Square(850, 200, 'blue', heroChosen.toLowerCase()));
+            }
+
             updateUI();
         }
 
         function showUpgrades() {
-            if (availableUpgrades.length === 0) { resetGame(); return; }
-            const options = [...availableUpgrades].sort(() => 0.5 - Math.random()).slice(0, 2);
             const container = document.getElementById('upgradeOptions');
+            const title = document.getElementById('screenTitle');
             container.innerHTML = '';
-            options.forEach(upg => {
-                const div = document.createElement('div');
-                div.className = 'upgrade-card';
-                div.innerHTML = `<h3>${upg.id}</h3><p>${upg.text}</p>`;
-                div.onclick = () => { 
-                    playerUpgrades.push(upg); 
-                    availableUpgrades = availableUpgrades.filter(a => a.id !== upg.id); 
-                    document.getElementById('upgradeScreen').style.display = 'none'; 
-                    resetGame(); 
-                };
-                container.appendChild(div);
-            });
+
+            if (availableUpgrades.length === 0 && !heroChosen) {
+                title.innerText = "CHOOSE YOUR HERO";
+                const heroes = [
+                    { id: 'King', img: 'man.jpeg', text: 'Melee AOE Specialist' },
+                    { id: 'Queen', img: 'woman.jpeg', text: 'Rapid Fire Sharpshooter' }
+                ];
+                heroes.forEach(h => {
+                    const div = document.createElement('div');
+                    div.className = 'upgrade-card';
+                    div.innerHTML = `<img src="${h.img}"><h3>${h.id}</h3><p>${h.text}</p>`;
+                    div.onclick = () => { heroChosen = h.id; document.getElementById('upgradeScreen').style.display = 'none'; resetGame(); };
+                    container.appendChild(div);
+                });
+            } else {
+                title.innerText = "GAME OVER - CHOOSE AN UPGRADE";
+                const options = [...availableUpgrades].sort(() => 0.5 - Math.random()).slice(0, 2);
+                if (options.length === 0) { resetGame(); return; }
+                options.forEach(upg => {
+                    const div = document.createElement('div');
+                    div.className = 'upgrade-card';
+                    div.innerHTML = `<h3>${upg.id}</h3><p>${upg.text}</p>`;
+                    div.onclick = () => { 
+                        playerUpgrades.push(upg); 
+                        availableUpgrades = availableUpgrades.filter(a => a.id !== upg.id); 
+                        document.getElementById('upgradeScreen').style.display = 'none'; 
+                        resetGame(); 
+                    };
+                    container.appendChild(div);
+                });
+            }
             document.getElementById('upgradeScreen').style.display = 'flex';
         }
 
@@ -239,11 +265,10 @@
                     ctx.beginPath();
                     if (u.shotLine.isAOE) {
                         ctx.strokeStyle = `rgba(255, 100, 0, ${u.shotLine.life/30})`;
-                        ctx.lineWidth = 3;
-                        ctx.arc(u.shotLine.x2, u.shotLine.y2, 100, 0, Math.PI * 2);
+                        ctx.lineWidth = 3; ctx.arc(u.shotLine.x2, u.shotLine.y2, 100, 0, Math.PI * 2);
                     } else {
                         ctx.strokeStyle = u.side === 'red' ? "orange" : "yellow";
-                        ctx.lineWidth = 1;
+                        ctx.lineWidth = (u.type === 'queen') ? 2 : 1;
                         ctx.moveTo(u.shotLine.x1, u.shotLine.y1); ctx.lineTo(u.shotLine.x2, u.shotLine.y2);
                     }
                     ctx.stroke(); u.shotLine.life--;
@@ -261,4 +286,3 @@
     </script>
 </body>
 </html>
-
