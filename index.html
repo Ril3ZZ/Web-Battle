@@ -18,7 +18,6 @@
         .gif-container { margin-top: 20px; }
         #battleGif { max-width: 900px; border-radius: 8px; border: 2px solid #333; }
     </style>
-    <audio id="bgMusic" src="mad.mp3" loop></audio>
 </head>
 <body>
 
@@ -44,6 +43,8 @@
         <h1 id="screenTitle">GAME OVER</h1>
         <div style="display: flex;" id="upgradeOptions"></div>
     </div>
+
+    <audio id="bgMusic" src="mad.mp3" loop></audio>
 
     <script>
         const canvas = document.getElementById('battleCanvas');
@@ -98,7 +99,6 @@
                 ctx.fillStyle = (this.type === 'king') ? "#f1c40f" : (this.type === 'queen') ? "#e84393" : this.side;
                 ctx.fillRect(this.x, this.y, 20, 20);
                 
-                // HP Bar
                 ctx.globalAlpha = 1.0;
                 ctx.fillStyle = "#444"; ctx.fillRect(this.x, this.y - 12, 20, 4);
                 ctx.fillStyle = this.side === 'red' ? '#ff4d4d' : '#4d94ff';
@@ -173,14 +173,15 @@
 
         function hasUpgrade(id) { return playerUpgrades.some(u => u.id === id); }
         function selectUnit(t) { selectedUnit = t; document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.id.toLowerCase().includes(t))); }
+        
         function startBattle() { 
-    if (blues.length > 0) {
-        isBattleRunning = true;
-        // Start background music on first interaction
-        const music = document.getElementById('bgMusic');
-        if (music.paused) music.play().catch(e => console.log("Audio play blocked until interaction."));
-    }
-}
+            if (blues.length > 0) {
+                isBattleRunning = true;
+                const music = document.getElementById('bgMusic');
+                if (music.paused) music.play().catch(e => console.log("Audio play blocked until interaction."));
+            }
+        }
+        
         function updateUI() {
             document.getElementById('lvlDisplay').innerText = level;
             document.getElementById('pointsDisplay').innerText = points;
@@ -192,21 +193,15 @@
             isBattleRunning = false; reds = []; blues = [];
             let basePoints = 10 + (level * 10);
             points = hasUpgrade('Rich') ? Math.floor(basePoints * 1.2) : basePoints;
-            
             let meleeCount = (level + 1) - (hasUpgrade('Weaker Enemies') ? 1 : 0);
             let archerCount = Math.floor(level / 5);
             let ninjaCount = Math.floor(level / 8);
             let cannonCount = level >= 15 ? 1 : 0;
-
             for(let i=0; i < Math.max(1, meleeCount); i++) reds.push(new Square(Math.random()*150+50, Math.random()*360+20, 'red', 'melee'));
             for(let i=0; i < archerCount; i++) reds.push(new Square(Math.random()*50+20, Math.random()*360+20, 'red', 'archer'));
             for(let i=0; i < ninjaCount; i++) reds.push(new Square(Math.random()*150+50, Math.random()*360+20, 'red', 'ninja'));
             for(let i=0; i < cannonCount; i++) reds.push(new Square(40, 200, 'red', 'cannon'));
-            
-            if(heroChosen) {
-                blues.push(new Square(850, 200, 'blue', heroChosen.toLowerCase()));
-            }
-
+            if(heroChosen) blues.push(new Square(850, 200, 'blue', heroChosen.toLowerCase()));
             updateUI();
         }
 
@@ -214,13 +209,9 @@
             const container = document.getElementById('upgradeOptions');
             const title = document.getElementById('screenTitle');
             container.innerHTML = '';
-
             if (availableUpgrades.length === 0 && !heroChosen) {
                 title.innerText = "CHOOSE YOUR HERO";
-                const heroes = [
-                    { id: 'King', img: 'man.jpeg', text: 'Melee AOE Specialist' },
-                    { id: 'Queen', img: 'woman.jpeg', text: 'Rapid Fire Sharpshooter' }
-                ];
+                const heroes = [{ id: 'King', img: 'man.jpeg', text: 'Melee AOE Specialist' }, { id: 'Queen', img: 'woman.jpeg', text: 'Rapid Fire Sharpshooter' }];
                 heroes.forEach(h => {
                     const div = document.createElement('div');
                     div.className = 'upgrade-card';
@@ -236,12 +227,7 @@
                     const div = document.createElement('div');
                     div.className = 'upgrade-card';
                     div.innerHTML = `<h3>${upg.id}</h3><p>${upg.text}</p>`;
-                    div.onclick = () => { 
-                        playerUpgrades.push(upg); 
-                        availableUpgrades = availableUpgrades.filter(a => a.id !== upg.id); 
-                        document.getElementById('upgradeScreen').style.display = 'none'; 
-                        resetGame(); 
-                    };
+                    div.onclick = () => { playerUpgrades.push(upg); availableUpgrades = availableUpgrades.filter(a => a.id !== upg.id); document.getElementById('upgradeScreen').style.display = 'none'; resetGame(); };
                     container.appendChild(div);
                 });
             }
@@ -262,9 +248,7 @@
         function loop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (!isBattleRunning) { ctx.fillStyle = "rgba(77, 148, 255, 0.05)"; ctx.fillRect(600, 0, 300, 400); }
-            
             reds = reds.filter(r => r.hp > 0); blues = blues.filter(b => b.hp > 0);
-            
             [...reds, ...blues].forEach(u => { 
                 if(isBattleRunning) u.update(u.side === 'red' ? blues : reds); 
                 u.draw();
@@ -281,16 +265,13 @@
                     ctx.stroke(); u.shotLine.life--;
                 }
             });
-
             if (isBattleRunning) {
                 if (reds.length === 0) { isBattleRunning = false; level++; setTimeout(initLevel, 500); }
                 else if (blues.length === 0) { isBattleRunning = false; lives--; if (lives <= 0) showUpgrades(); else setTimeout(initLevel, 500); }
             }
             requestAnimationFrame(loop);
         }
-
         initLevel(); loop();
     </script>
 </body>
 </html>
-
