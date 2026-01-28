@@ -116,13 +116,13 @@
 
                 if (type === 'ninja') {
 
-                    this.hp = 5;
+                    this.hp = 10;
 
-                    this.invulnTimer = 180; // 3 seconds at 60fps
+                    this.invulnTimer = 240; // 4 seconds at 60fps
 
                 } else if (side === 'blue' && type === 'melee' && hasUpgrade('Tank')) {
 
-                    this.hp = 4;
+                    this.hp = 8;
 
                 } else {
 
@@ -229,7 +229,7 @@
 
                         else {
 
-                            const speed = (this.side === 'blue' && hasUpgrade('Fast Archers')) ? 60 : 120;
+                            const speed = (this.side === 'blue' && hasUpgrade('Fast Archers')) ? 75 : 120;
 
                             const dmg = (this.side === 'blue' && hasUpgrade('Powerful Arrows')) ? 2 : 1;
 
@@ -428,6 +428,7 @@
     <img src="ss.gif" alt="Game Animation" id="battleGif">
 </div>
 </html>
+
 
 
 
