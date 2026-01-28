@@ -60,11 +60,15 @@
                 this.x = x - 10; this.y = y - 10;
                 this.side = side; this.type = type;
                 
+                // HP Logic
                 if (type === 'ninja') {
                     this.hp = 5;
                     this.invulnTimer = 180; 
                 } else if (side === 'blue' && type === 'melee' && hasUpgrade('Tank')) {
                     this.hp = 4;
+                } else if (side === 'red' && type === 'melee' && level > 30) {
+                    // ENEMY BUFF: Melee units get 6 HP after level 30
+                    this.hp = 6;
                 } else {
                     this.hp = 3;
                 }
@@ -122,7 +126,6 @@
                         } else {
                             const speed = (this.side === 'blue' && hasUpgrade('Fast Archers')) ? 60 : 120;
                             
-                            // CALCULATE DAMAGE: Blue needs upgrade, Red gets buff after Level 10
                             let dmg = 1;
                             if (this.side === 'blue' && hasUpgrade('Powerful Arrows')) {
                                 dmg = 2;
@@ -134,7 +137,6 @@
                             if (this.attackTimer >= speed) {
                                 nearest.takeDamage(dmg); 
                                 this.attackTimer = 0;
-                                // Visual feedback: thick shot line for 2dmg
                                 this.shotLine = {
                                     x1: this.x+10, y1: this.y+10, 
                                     x2: nearest.x+10, y2: nearest.y+10, 
