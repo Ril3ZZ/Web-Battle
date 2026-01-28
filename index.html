@@ -179,7 +179,7 @@
 
         function initLevel() {
             isBattleRunning = false; reds = []; blues = [];
-            let basePoints = 10 + (level * 10);
+            let basePoints = 20 + (level * 10);
             points = hasUpgrade('Rich') ? Math.floor(basePoints * 1.2) : basePoints;
             
             let meleeCount = (level + 1) - (hasUpgrade('Weaker Enemies') ? 1 : 0);
@@ -261,3 +261,4 @@
     </script>
 </body>
 </html>
+
