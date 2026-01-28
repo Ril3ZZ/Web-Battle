@@ -18,6 +18,7 @@
         .gif-container { margin-top: 20px; }
         #battleGif { max-width: 900px; border-radius: 8px; border: 2px solid #333; }
     </style>
+    <audio id="bgMusic" src="mad.mp3" loop></audio>
 </head>
 <body>
 
@@ -172,8 +173,14 @@
 
         function hasUpgrade(id) { return playerUpgrades.some(u => u.id === id); }
         function selectUnit(t) { selectedUnit = t; document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.id.toLowerCase().includes(t))); }
-        function startBattle() { if (blues.length > 0) isBattleRunning = true; }
-        
+        function startBattle() { 
+    if (blues.length > 0) {
+        isBattleRunning = true;
+        // Start background music on first interaction
+        const music = document.getElementById('bgMusic');
+        if (music.paused) music.play().catch(e => console.log("Audio play blocked until interaction."));
+    }
+}
         function updateUI() {
             document.getElementById('lvlDisplay').innerText = level;
             document.getElementById('pointsDisplay').innerText = points;
@@ -286,3 +293,4 @@
     </script>
 </body>
 </html>
+
